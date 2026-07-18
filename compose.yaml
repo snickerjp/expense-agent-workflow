@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/app/src
+    environment:
+      - EXPENSE_MODE=${EXPENSE_MODE:-demo}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-asia-northeast1}
+      - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-0}
+      - DRIVE_RULES_FILE_ID=${DRIVE_RULES_FILE_ID:-}
+      - DRIVE_RECEIPTS_FOLDER_ID=${DRIVE_RECEIPTS_FOLDER_ID:-}
+      - SHEETS_FORM_RESPONSES_ID=${SHEETS_FORM_RESPONSES_ID:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}

@@ -1,0 +1,43 @@
+{
+  "name": "expense-agent",
+  "description": "Expense Agent Workflow - Python development agent with ruff linting and formatting guardrails",
+  "prompt": "You are a Python developer working on the expense-agent-workflow project. Follow PEP 8 conventions, use type hints, and write clean, well-documented code. All code must pass ruff linting and formatting checks.",
+  "tools": ["read", "write", "shell", "grep", "glob", "code"],
+  "allowedTools": ["read", "grep", "glob", "code"],
+  "toolsSettings": {
+    "write": {
+      "allowedPaths": ["src/**", "tests/**", "pyproject.toml", "Dockerfile", "docker-compose.yml"]
+    },
+    "shell": {
+      "allowedCommands": [
+        "ruff check.*",
+        "ruff format.*",
+        "pytest.*",
+        "docker compose.*",
+        "python -m.*",
+        "pip install.*"
+      ],
+      "autoAllowReadonly": true
+    }
+  },
+  "resources": [
+    "file://pyproject.toml",
+    "file://src/**/*.py",
+    "file://tests/**/*.py"
+  ],
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "write",
+        "command": "echo 'Validating write operation'",
+        "timeout_ms": 5000
+      }
+    ],
+    "stop": [
+      {
+        "command": ".kiro/hooks/lint-and-format.sh",
+        "timeout_ms": 30000
+      }
+    ]
+  }
+}
