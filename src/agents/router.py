@@ -1,31 +1,37 @@
-"""ExpenseRouter - Sequential ワークフロー.
+"""ExpenseRouter - Workflow で RuleFinder → ExpenseChecker を実行.
 
-RuleFinder → ExpenseChecker を順番に実行する。
-
-ADK SequentialAgent pattern:
-- sub_agents are executed in order
+ADK 2.0 Workflow pattern:
+- edges define execution flow between nodes
+- START → rule_finder → expense_checker (sequential)
 - output_key stores result in session state
 - Next agent references output via {state_key}
 """
 
-from google.adk.agents import SequentialAgent
+from google.adk import Workflow
+from google.adk.workflow import START
 
 from src.agents.expense_checker import expense_checker_agent
 from src.agents.rule_finder import rule_finder_agent
 
 
-def create_expense_router_agent() -> SequentialAgent:
-    """ExpenseRouter SequentialAgent を作成.
+def create_expense_router_agent() -> Workflow:
+    """ExpenseRouter Workflow を作成.
 
     Pipeline:
         rule_finder (output_key="extracted_rules")
         → expense_checker (reads {extracted_rules},
                            output_key="check_result")
     """
-    return SequentialAgent(
+    return Workflow(
         name="expense_router",
-        description="経費精算チェックのパイプライン: ルール抽出 → 審査判定",
-        sub_agents=[rule_finder_agent, expense_checker_agent],
+        description=("経費精算チェックのパイプライン: ルール抽出 → 審査判定"),
+        edges=[
+            (
+                START,
+                rule_finder_agent,
+                expense_checker_agent,
+            ),
+        ],
     )
 
 

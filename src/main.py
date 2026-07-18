@@ -52,9 +52,7 @@ async def lifespan(app: FastAPI):
     if not settings.is_demo:
         import os
 
-        os.environ["GOOGLE_CLOUD_LOCATION"] = (
-            settings.GEMINI_LOCATION
-        )
+        os.environ["GOOGLE_CLOUD_LOCATION"] = settings.GEMINI_LOCATION
 
     _runner = InMemoryRunner(
         agent=expense_router_agent,
