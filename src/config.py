@@ -57,12 +57,11 @@ class Settings(BaseSettings):
     def model_name(self) -> str:
         """Get the LLM model name.
 
-        Multimodal capable model for text + image input.
-        Uses Vertex AI global model in production mode.
+        Uses gemini-3.5-flash (GA stable) for both modes.
+        Multimodal, function calling, thinking capable.
+        Best cost-efficiency in the Flash tier.
         """
-        if self.is_demo:
-            return "gemini-3.5-flash"
-        return "gemini-3.1-flash-lite-preview"
+        return "gemini-3.5-flash"
 
 
 @lru_cache
