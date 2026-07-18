@@ -1,14 +1,17 @@
 # 経費精算マルチエージェントシステム
 
-Google ADK + FastAPI + Docker による経費精算の自動審査APIシステム。  
+Google ADK + FastAPI + Docker による経費精算の自動審査APIシステム。
 Cloud Run へのデプロイに最適化。マルチモーダル対応（領収書画像読み取り）。
 
 ## 動作モード
 
-| モード | 環境変数 `EXPENSE_MODE` | 説明 |
-|---|---|---|
-| **demo** | `demo`（デフォルト） | ハードコードルール、APIキー認証、画像読み取りなし |
-| **production** | `production` | Drive/Sheets連携、Vertex AI、サービスアカウント認証、領収書画像OCR |
+| モード | 環境変数 `EXPENSE_MODE` | LLM | 料金 (per 1M tokens) |
+|---|---|---|---|
+| **demo** | `demo`（デフォルト） | gemini-3.5-flash | Input $1.50 / Output $1.50 |
+| **production** | `production` | gemini-3.1-flash-lite | Input $0.25 / Output $1.50 |
+
+- demo: ハードコードルール、APIキー認証、画像読み取りなし
+- production: Drive/Sheets連携、Vertex AI (location=global)、サービスアカウント認証、領収書画像OCR
 
 ## アーキテクチャ
 
@@ -20,7 +23,7 @@ graph TB
         GD_K[Google Drive: 社内規程ドキュメント]
     end
 
-    subgraph "Cloud Run (Service Account認証)"
+    subgraph "Cloud Run (asia-northeast1)"
         API[FastAPI<br>POST /api/expense-check]
         CFG[Config<br>EXPENSE_MODE切替]
 
@@ -37,8 +40,8 @@ graph TB
         end
     end
 
-    subgraph "Vertex AI / Gemini API"
-        GEMINI[Gemini 2.5 Flash<br>マルチモーダル対応]
+    subgraph "Vertex AI (location=global)"
+        GEMINI[Gemini 3.1 Flash-Lite<br>マルチモーダル対応]
     end
 
     GS -->|Sheets API| SS
@@ -59,15 +62,15 @@ graph TB
 sequenceDiagram
     participant Client
     participant FastAPI
-    participant Runner as ADK Runner
+    participant Runner as ADK InMemoryRunner
     participant RF as RuleFinder
     participant EC as ExpenseChecker
     participant Drive as Google Drive
-    participant LLM as Gemini 2.5 Flash
+    participant LLM as Gemini (global)
 
     Client->>FastAPI: POST /api/expense-check
     FastAPI->>Runner: run_async(申請データ + 画像)
-    
+
     Note over Runner: Sequential実行開始
 
     Runner->>RF: Step 1: ルール抽出
@@ -84,7 +87,7 @@ sequenceDiagram
         EC->>Drive: 領収書画像ダウンロード
         Drive-->>EC: 画像バイナリ
     end
-    EC->>LLM: extracted_rules + 申請データ + 領収書画像
+    EC->>LLM: {extracted_rules} + 申請データ + 領収書画像
     LLM-->>EC: JSON(status, confidence_score, details)
     EC-->>Runner: output_key: "check_result"
 
@@ -98,24 +101,27 @@ sequenceDiagram
 
 ```
 expense-agent-workflow/
-├── docker-compose.yml
+├── compose.yaml
 ├── docker/
-│   ├── dev.Dockerfile          # 開発用（ホットリロード）
-│   └── prod.Dockerfile         # 本番用（マルチステージビルド）
+│   ├── dev.Dockerfile
+│   └── prod.Dockerfile
+├── deploy_cloudrun.py
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── pyproject.toml
+├── .editorconfig
+├── .env.example
 ├── src/
-│   ├── config.py               # 環境変数ベースの設定管理
-│   ├── main.py                 # FastAPI アプリケーション
-│   ├── schemas.py              # Pydantic スキーマ
+│   ├── config.py
+│   ├── main.py
+│   ├── schemas.py
 │   ├── agents/
-│   │   ├── rule_finder.py      # 社内規程ルール抽出エージェント
-│   │   ├── expense_checker.py  # 審査判定エージェント（マルチモーダル）
-│   │   └── router.py           # SequentialAgent パイプライン
+│   │   ├── rule_finder.py
+│   │   ├── expense_checker.py
+│   │   └── router.py
 │   └── services/
-│       ├── drive.py            # Google Drive API クライアント
-│       └── sheets.py           # Google Sheets API クライアント
+│       ├── drive.py
+│       └── sheets.py
 ├── tests/
 │   ├── test_config.py
 │   ├── test_schemas.py
@@ -125,6 +131,9 @@ expense-agent-workflow/
 │   ├── test_main.py
 │   ├── test_drive.py
 │   └── test_sheets.py
+├── gas/
+│   ├── form_trigger.gs
+│   └── README.md
 └── .kiro/
     ├── agents/expense-agent.json
     └── hooks/lint-and-format.sh
@@ -141,26 +150,25 @@ expense-agent-workflow/
 ### ローカル開発（demo モード）
 
 ```bash
-# 環境変数を設定
-export GOOGLE_API_KEY=your-api-key
-export EXPENSE_MODE=demo
+cp .env.example .env
+# .env の GOOGLE_API_KEY を設定
 
-# コンテナ起動（ホットリロード有効）
 docker compose up
 ```
 
 ### Production モード設定
 
 ```bash
-export EXPENSE_MODE=production
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export GOOGLE_CLOUD_LOCATION=asia-northeast1
-export DRIVE_RULES_FILE_ID=your-rules-doc-file-id
-export DRIVE_RECEIPTS_FOLDER_ID=your-receipts-folder-id
-export SHEETS_FORM_RESPONSES_ID=your-spreadsheet-id
-
-# サービスアカウント認証（ローカル開発時）
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+# .env を編集
+EXPENSE_MODE=production
+GOOGLE_GENAI_USE_VERTEXAI=1
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=asia-northeast1
+GEMINI_LOCATION=global
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+DRIVE_RULES_FILE_ID=your-rules-doc-file-id
+DRIVE_RECEIPTS_FOLDER_ID=your-receipts-folder-id
+SHEETS_FORM_RESPONSES_ID=your-spreadsheet-id
 
 docker compose up
 ```
@@ -171,7 +179,7 @@ docker compose up
 pytest tests/ -v
 ```
 
-### Lint / Format
+### Lint / Format（Google Python Style Guide準拠）
 
 ```bash
 ruff check src/ tests/
@@ -184,8 +192,10 @@ ruff format src/ tests/
 |---|---|---|---|
 | `EXPENSE_MODE` | - | `demo` | 動作モード (`demo` / `production`) |
 | `GOOGLE_API_KEY` | demo時 | - | Gemini API キー |
+| `GOOGLE_GENAI_USE_VERTEXAI` | production時 | `false` | Vertex AI使用フラグ |
 | `GOOGLE_CLOUD_PROJECT` | production時 | - | GCPプロジェクトID |
-| `GOOGLE_CLOUD_LOCATION` | - | `asia-northeast1` | GCPリージョン |
+| `GOOGLE_CLOUD_LOCATION` | - | `asia-northeast1` | Cloud Runデプロイリージョン |
+| `GEMINI_LOCATION` | - | `global` | Vertex AIモデル呼び出しリージョン |
 | `DRIVE_RULES_FILE_ID` | - | - | 社内規程ドキュメントのDriveファイルID |
 | `DRIVE_RECEIPTS_FOLDER_ID` | - | - | 領収書フォルダのDrive ID |
 | `SHEETS_FORM_RESPONSES_ID` | - | - | Formの回答スプレッドシートID |
@@ -219,7 +229,7 @@ ruff format src/ tests/
     "limit_amount": 5000,
     "required_items_check": "全員の氏名あり",
     "prohibition_check": "該当なし",
-    "receipt_check": "宛名: 株式会社テスト、金額一致、日付妥当"
+    "receipt_check": "宛名: 株式会社テスト、金額一致"
   },
   "rejection_reason": null
 }
@@ -236,21 +246,12 @@ ruff format src/ tests/
 
 ## Cloud Run デプロイ
 
-### デプロイスクリプトを使用（推奨）
-
-`adk deploy cloud_run` コマンドでサービスアカウント付きデプロイを行います。
+### デプロイスクリプト（推奨）
 
 ```bash
-# .envファイルを作成
-cat > .env << EOF
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=asia-northeast1
-DRIVE_RULES_FILE_ID=your-rules-doc-id
-DRIVE_RECEIPTS_FOLDER_ID=your-receipts-folder-id
-SHEETS_FORM_RESPONSES_ID=your-spreadsheet-id
-EOF
+cp .env.example .env
+# .env にプロジェクトID等を設定
 
-# デプロイ実行
 python deploy_cloudrun.py
 ```
 
@@ -262,38 +263,32 @@ python deploy_cloudrun.py
 ### 手動デプロイ（Dockerイメージ）
 
 ```bash
-# イメージビルド
 docker build -f docker/prod.Dockerfile -t expense-agent .
 
-# Cloud Run デプロイ
 gcloud run deploy expense-agent \
   --image gcr.io/PROJECT_ID/expense-agent \
   --platform managed \
   --region asia-northeast1 \
-  --set-env-vars "EXPENSE_MODE=production,GOOGLE_CLOUD_PROJECT=PROJECT_ID,DRIVE_RULES_FILE_ID=xxx,SHEETS_FORM_RESPONSES_ID=yyy" \
+  --set-env-vars "EXPENSE_MODE=production,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=PROJECT_ID,GEMINI_LOCATION=global" \
   --service-account expense-agent@PROJECT_ID.iam.gserviceaccount.com \
   --allow-unauthenticated
 ```
-
-### サービスアカウントに必要な権限
-
-- `roles/drive.metadata.reader` (Drive ファイルメタデータ読み取り)
-- `roles/drive.readonly` (Drive ファイルダウンロード)
-- `roles/aiplatform.user` (Vertex AI Gemini 呼び出し)
 
 ## 技術スタック
 
 | 項目 | 技術 |
 |---|---|
-| フレームワーク | FastAPI 0.115 |
-| AIエージェント | Google ADK 1.5 (SequentialAgent) |
-| LLM | Gemini 2.5 Flash（マルチモーダル） |
+| フレームワーク | FastAPI (lifespan pattern) |
+| AIエージェント | Google ADK 1.5 (SequentialAgent + InMemoryRunner) |
+| LLM (demo) | Gemini 3.5 Flash (Gemini API) |
+| LLM (production) | Gemini 3.1 Flash-Lite (Vertex AI, global) |
 | バリデーション | Pydantic 2.11 |
 | 設定管理 | pydantic-settings |
 | Google API | google-api-python-client (Drive, Sheets) |
 | 認証 | google-auth（サービスアカウント / APIキー） |
-| サーバー | Uvicorn 0.34 |
+| サーバー | Uvicorn |
 | コンテナ | Docker (python:3.13-slim) |
 | デプロイ先 | Google Cloud Run |
-| Linter/Formatter | Ruff |
+| Linter/Formatter | Ruff (Google Python Style Guide準拠, 80文字) |
 | テスト | pytest + pytest-asyncio + httpx |
+| GAS連携 | Google Apps Script (Form → API → Sheets) |
