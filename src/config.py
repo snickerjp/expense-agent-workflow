@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_LOCATION: str = "asia-northeast1"
     GOOGLE_GENAI_USE_VERTEXAI: bool = False
 
+    # Vertex AI model location (global for Gemini models)
+    GEMINI_LOCATION: str = "global"
+
     # Google API Key (demo mode)
     GOOGLE_API_KEY: str | None = None
 
@@ -57,11 +60,14 @@ class Settings(BaseSettings):
     def model_name(self) -> str:
         """Get the LLM model name.
 
-        Uses gemini-3.5-flash (GA stable) for both modes.
-        Multimodal, function calling, thinking capable.
-        Best cost-efficiency in the Flash tier.
+        - demo (Gemini API): gemini-3.5-flash
+        - production (Vertex AI): gemini-3.1-flash-lite
+          GA since May 2026, 6x cheaper than 3.5 flash.
+          Global model, location='global'.
         """
-        return "gemini-3.5-flash"
+        if self.is_demo:
+            return "gemini-3.5-flash"
+        return "gemini-3.1-flash-lite"
 
 
 @lru_cache

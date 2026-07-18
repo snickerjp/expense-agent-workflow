@@ -44,6 +44,18 @@ async def lifespan(app: FastAPI):
     Initialize ADK runner on startup, cleanup on shutdown.
     """
     global _runner
+
+    # ADK reads GOOGLE_CLOUD_LOCATION for Vertex AI endpoint.
+    # Global models (e.g. gemini-3.1-flash-lite-preview) require
+    # location='global', separate from Cloud Run deploy region.
+    settings = get_settings()
+    if not settings.is_demo:
+        import os
+
+        os.environ["GOOGLE_CLOUD_LOCATION"] = (
+            settings.GEMINI_LOCATION
+        )
+
     _runner = InMemoryRunner(
         agent=expense_router_agent,
         app_name=APP_NAME,
