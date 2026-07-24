@@ -1,0 +1,6 @@
+project_id = "your-gcp-project-id"
+# region                 = "asia-northeast1"
+# service_name           = "expense-agent"
+# repository_id          = "expense-agent"
+# image_tag              = "asia-northeast1-docker.pkg.dev/your-gcp-project-id/expense-agent/expense-agent:latest"
+# allow_unauthenticated  = true

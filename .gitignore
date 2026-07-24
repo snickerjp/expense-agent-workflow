@@ -32,6 +32,14 @@ htmlcov/
 # Docker
 .docker/
 
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+tfplan*
+
 # OS
 .DS_Store
 Thumbs.db
