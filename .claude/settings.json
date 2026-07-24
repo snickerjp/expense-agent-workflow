@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(ruff check *)",
+      "Bash(ruff format *)",
+      "Bash(pytest *)",
+      "Bash(docker compose *)",
+      "Bash(python -m *)",
+      "Bash(pip install *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".kiro/hooks/lint-and-format.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
