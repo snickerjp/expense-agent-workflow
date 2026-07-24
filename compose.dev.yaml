@@ -1,0 +1,20 @@
+services:
+  lint:
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./pyproject.toml:/app/pyproject.toml
+    command: ["ruff", "check", "src/", "tests/"]
+
+  format-check:
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./pyproject.toml:/app/pyproject.toml
+    command: ["ruff", "format", "--check", "src/", "tests/"]
