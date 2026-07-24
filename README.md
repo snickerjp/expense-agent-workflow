@@ -115,6 +115,8 @@ expense-agent-workflow/
 │   ├── config.py
 │   ├── main.py
 │   ├── schemas.py
+│   ├── static/
+│   │   └── index.html      # 簡易Web UI（フォーム入力→審査結果表示）
 │   ├── agents/
 │   │   ├── rule_finder.py
 │   │   ├── expense_checker.py
@@ -134,6 +136,10 @@ expense-agent-workflow/
 ├── gas/
 │   ├── form_trigger.gs
 │   └── README.md
+├── terraform/               # Cloud RunデプロイのIaC（作成/破棄が容易）
+├── slides/
+│   ├── slides.md            # Slidev形式のプレゼン資料
+│   └── expense-agent-demo-combined.png
 └── .kiro/
     ├── agents/expense-agent.json
     └── hooks/lint-and-format.sh
@@ -201,6 +207,10 @@ ruff format src/ tests/
 | `SHEETS_FORM_RESPONSES_ID` | - | - | Formの回答スプレッドシートID |
 | `GOOGLE_APPLICATION_CREDENTIALS` | production時(ローカル) | - | サービスアカウントJSONパス |
 
+## Web UI（簡易画面）
+
+`GET /` にアクセスすると、申請フォーム入力〜審査結果表示までを1画面で完結できる簡易UIが表示される（`src/static/index.html`）。領収書画像はアップロードすると base64 で `/api/expense-check` に直接送信され、Driveを経由せずマルチモーダル解析される。
+
 ## API仕様
 
 ### POST /api/expense-check
@@ -214,9 +224,13 @@ ruff format src/ tests/
   "count": 6,
   "participants_raw": "田中太郎、山田花子、佐藤一郎、鈴木次郎、高橋三郎、伊藤四郎",
   "purpose": "チームビルディング",
-  "receipt_url": "https://drive.google.com/file/d/FILE_ID/view"
+  "receipt_url": "https://drive.google.com/file/d/FILE_ID/view",
+  "receipt_image_base64": "iVBORw0KGgoAAAANSUhEUgAA...",
+  "receipt_mime_type": "image/jpeg"
 }
 ```
+
+`receipt_url`（Drive経由、production時のみ）と `receipt_image_base64`+`receipt_mime_type`（直接アップロード、モード不問）はどちらか一方のみで良い。両方省略した場合は画像なしのテキスト審査となる。
 
 **レスポンス:**
 

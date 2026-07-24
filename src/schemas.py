@@ -16,6 +16,13 @@ class ExpenseCheckRequest(BaseModel):
     )
     purpose: str = Field(..., description="目的")
     receipt_url: str | None = Field(default=None, description="領収書URL")
+    receipt_image_base64: str | None = Field(
+        default=None,
+        description="領収書画像（base64エンコード、直接アップロード用）",
+    )
+    receipt_mime_type: str | None = Field(
+        default=None, description="領収書画像のMIMEタイプ（例: image/jpeg）"
+    )
 
 
 class ExpenseCheckResponse(BaseModel):

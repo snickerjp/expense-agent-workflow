@@ -40,6 +40,9 @@ htmlcov/
 *.tfplan
 tfplan*
 
+# Node (Slidev等)
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db

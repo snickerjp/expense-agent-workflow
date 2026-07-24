@@ -11,13 +11,16 @@ Design:
 - FastAPI lifespan context manager for lifecycle
 """
 
+import base64
 import json
 import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
@@ -84,6 +87,15 @@ def get_runner() -> InMemoryRunner:
     return _runner
 
 
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> str:
+    """申請フォーム〜審査結果表示までを1画面で完結させる簡易UI."""
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+
 def _extract_json(text: str) -> str:
     """Extract JSON from text, handling markdown code blocks.
 
@@ -125,6 +137,11 @@ async def run_expense_check(
         user_id=user_id,
     )
 
+    has_receipt_image = bool(
+        (receipt_file_id and not settings.is_demo)
+        or (request.receipt_image_base64 and request.receipt_mime_type)
+    )
+
     # Build the user message from request data
     user_message = (
         f"以下の経費精算申請を審査してください:\n"
@@ -133,7 +150,7 @@ async def run_expense_check(
         f"- 参加人数: {request.count}人\n"
         f"- 参加者: {request.participants_raw}\n"
         f"- 目的: {request.purpose}\n"
-        f"- 領収書URL: {request.receipt_url or 'なし'}\n"
+        f"- 領収書画像: {'添付あり（後続のPart参照）' if has_receipt_image else 'なし'}\n"
     )
 
     # Build parts (text + optional image for multimodal)
@@ -146,6 +163,17 @@ async def run_expense_check(
             image_part = build_receipt_image_part(image_bytes, mime_type)
             parts.append(image_part)
             logger.info("Added receipt image to request (mime: %s)", mime_type)
+    elif request.receipt_image_base64 and request.receipt_mime_type:
+        # 直接アップロードされた画像（Drive非経由）
+        image_bytes = base64.b64decode(request.receipt_image_base64)
+        image_part = build_receipt_image_part(
+            image_bytes, request.receipt_mime_type
+        )
+        parts.append(image_part)
+        logger.info(
+            "Added uploaded receipt image to request (mime: %s)",
+            request.receipt_mime_type,
+        )
 
     content = types.Content(role="user", parts=parts)
 

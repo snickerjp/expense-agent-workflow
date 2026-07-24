@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>経費精算マルチエージェントシステム</title>
+<style>
+  body {
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #222;
+    background: #fafafa;
+  }
+  h1 { font-size: 1.4rem; }
+  form {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  label { display: block; margin-top: 14px; font-weight: bold; font-size: 0.9rem; }
+  input, select, textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    margin-top: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  .hint {
+    font-weight: normal;
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 2px;
+  }
+  #receipt-preview {
+    display: none;
+    margin-top: 10px;
+    max-width: 100%;
+    max-height: 240px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  button {
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:disabled { background: #999; cursor: default; }
+  #result {
+    margin-top: 24px;
+    padding: 16px;
+    border-radius: 8px;
+    display: none;
+  }
+  #result.承認 { background: #e6f4ea; border: 1px solid #34a853; }
+  #result.却下 { background: #fce8e6; border: 1px solid #ea4335; }
+  #result.要人間確認 { background: #fef7e0; border: 1px solid #fbbc04; }
+  #result h2 { margin-top: 0; font-size: 1.1rem; }
+  #result pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0,0,0,0.04);
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>経費精算マルチエージェントシステム</h1>
+<p>申請内容を入力して送信すると、AIエージェントが社内規程と照合して審査結果を返します。</p>
+
+<form id="expense-form">
+  <label for="type">申請種別</label>
+  <select id="type" required>
+    <option value="社内懇親会">社内懇親会</option>
+    <option value="社外接待">社外接待</option>
+  </select>
+
+  <label for="amount">合計金額（円）</label>
+  <input type="number" id="amount" min="1" required value="24000" />
+
+  <label for="count">参加人数</label>
+  <input type="number" id="count" min="1" required value="6" />
+
+  <label for="participants_raw">参加者氏名（読点区切り）</label>
+  <textarea id="participants_raw" required>田中太郎、山田花子、佐藤一郎、鈴木次郎、高橋三郎、伊藤四郎</textarea>
+
+  <label for="purpose">目的</label>
+  <input type="text" id="purpose" required value="チームビルディング" />
+
+  <label for="receipt">
+    領収書画像（任意）
+    <div class="hint">マルチモーダル対応: アップロードするとAIが画像内容（宛名・金額・日付）も確認します</div>
+  </label>
+  <input type="file" id="receipt" accept="image/*" />
+  <img id="receipt-preview" alt="領収書プレビュー" />
+
+  <button type="submit" id="submit-btn">審査を依頼する</button>
+</form>
+
+<div id="result"></div>
+
+<script>
+const form = document.getElementById("expense-form");
+const resultDiv = document.getElementById("result");
+const submitBtn = document.getElementById("submit-btn");
+const receiptInput = document.getElementById("receipt");
+const receiptPreview = document.getElementById("receipt-preview");
+let receiptDataUrl = null;
+
+receiptInput.addEventListener("change", () => {
+  const file = receiptInput.files[0];
+  if (!file) {
+    receiptDataUrl = null;
+    receiptPreview.style.display = "none";
+    receiptPreview.src = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    receiptDataUrl = reader.result;
+    receiptPreview.src = reader.result;
+    receiptPreview.style.display = "block";
+  };
+  reader.readAsDataURL(file);
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  submitBtn.disabled = true;
+  submitBtn.textContent = "審査中...";
+  resultDiv.style.display = "none";
+
+  const payload = {
+    type: document.getElementById("type").value,
+    amount: Number(document.getElementById("amount").value),
+    count: Number(document.getElementById("count").value),
+    participants_raw: document.getElementById("participants_raw").value,
+    purpose: document.getElementById("purpose").value,
+  };
+
+  if (receiptDataUrl) {
+    const [header, base64Data] = receiptDataUrl.split(",");
+    const mimeMatch = header.match(/data:(.*?);base64/);
+    payload.receipt_image_base64 = base64Data;
+    payload.receipt_mime_type = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  }
+
+  try {
+    const res = await fetch("/api/expense-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    resultDiv.className = data.status || "";
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = `
+      <h2>審査結果: ${data.status ?? "エラー"}</h2>
+      <p>確信度スコア: ${data.confidence_score ?? "-"}</p>
+      ${data.rejection_reason ? `<p><strong>理由:</strong> ${data.rejection_reason}</p>` : ""}
+      <pre>${JSON.stringify(data.details ?? data, null, 2)}</pre>
+    `;
+  } catch (err) {
+    resultDiv.className = "";
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = `<h2>通信エラー</h2><pre>${err}</pre>`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "審査を依頼する";
+  }
+});
+</script>
+
+</body>
+</html>
